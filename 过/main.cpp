@@ -217,6 +217,15 @@ static string httppost(const string& hostname, const string& url, const string& 
     return result.empty() ? "No response" : result;
 }
 
+// ====== 转换 string 到 wstring ======
+static wstring s2w(const string& s) {
+    if (s.empty()) return wstring();
+    int len = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, NULL, 0);
+    wstring ws(len, 0);
+    MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, &ws[0], len);
+    return ws;
+}
+
 // ====== 微验卡密验证 ======
 static bool VerifyLicense(const string& kami) {
     string _Imei = getIMEI();
@@ -239,21 +248,21 @@ static bool VerifyLicense(const string& kami) {
     string response = httppost(WY_HOST, "api/?id=kmlogon", postData);
 
     // 调试：显示服务器返回内容
-    MessageBoxA(NULL, ("服务器响应:\n" + response).c_str(), "调试", MB_OK);
+    MessageBoxW(NULL, (L"服务器响应:\n" + s2w(response)).c_str(), L"调试", MB_OK);
 
     try {
         json j = json::parse(response);
         int code = j["code"];
         if (code == WY_SUCCESS_CODE) {
-            MessageBoxA(NULL, "卡密验证成功！", "成功", MB_ICONINFORMATION);
+            MessageBoxW(NULL, L"卡密验证成功！", L"成功", MB_ICONINFORMATION);
             return true;
         } else {
             string msg = j["msg"].get<string>();
-            MessageBoxA(NULL, ("验证失败: " + msg).c_str(), "验证失败", MB_ICONERROR);
+            MessageBoxW(NULL, (L"验证失败: " + s2w(msg)).c_str(), L"验证失败", MB_ICONERROR);
             return false;
         }
     } catch (exception& e) {
-        MessageBoxA(NULL, ("解析响应失败: " + string(e.what())).c_str(), "错误", MB_ICONERROR);
+        MessageBoxW(NULL, (L"解析响应失败: " + s2w(string(e.what()))).c_str(), L"错误", MB_ICONERROR);
         return false;
     }
 }
