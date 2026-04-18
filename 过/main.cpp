@@ -544,40 +544,41 @@ static int RequestElevation() {
     return ShellExecuteExW(&sei);
 }
 
+// ====== 全局变量用于卡密验证 ==========
+static int g_LicenseResult = 0;  // 0=未验证, 1=成功, 2=失败
+static HWND g_hLicenseEdit = NULL;
+
 // ====== 卡密对话框窗口过程 ======
 static LRESULT CALLBACK LicenseDialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-    static HWND hEdit = NULL;
-    static HWND hBtnOk = NULL;
-    static HWND hBtnCancel = NULL;
-    static HINSTANCE hInstEx = NULL;
-    if (msg == WM_CREATE) {
-        hInstEx = ((CREATESTRUCT*)lp)->hInstance;
+    switch (msg) {
+    case WM_CREATE:
+    {
+        HINSTANCE hInst = ((CREATESTRUCT*)lp)->hInstance;
         HFONT hFont = CreateFontW(16, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei UI");
         CreateWindowW(L"static", L"请输入卡密：",
-            WS_CHILD | WS_VISIBLE, 20, 20, 200, 25, hwnd, NULL, hInstEx, NULL);
-        hEdit = CreateWindowW(L"edit", L"",
+            WS_CHILD | WS_VISIBLE, 20, 20, 200, 25, hwnd, NULL, hInst, NULL);
+        g_hLicenseEdit = CreateWindowW(L"edit", L"",
             WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
-            20, 50, 260, 28, hwnd, (HMENU)100, hInstEx, NULL);
-        hBtnOk = CreateWindowW(L"button", L"验证",
+            20, 50, 260, 28, hwnd, (HMENU)100, hInst, NULL);
+        CreateWindowW(L"button", L"验证",
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            60, 90, 80, 32, hwnd, (HMENU)IDOK, hInstEx, NULL);
-        hBtnCancel = CreateWindowW(L"button", L"取消",
+            60, 90, 80, 32, hwnd, (HMENU)1, hInst, NULL);
+        CreateWindowW(L"button", L"取消",
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            160, 90, 80, 32, hwnd, (HMENU)IDCANCEL, hInstEx, NULL);
-        SendMessageW(hEdit, WM_SETFONT, (WPARAM)hFont, TRUE);
-        SendMessageW(hBtnOk, WM_SETFONT, (WPARAM)hFont, TRUE);
-        SendMessageW(hBtnCancel, WM_SETFONT, (WPARAM)hFont, TRUE);
-        SetFocus(hEdit);
+            160, 90, 80, 32, hwnd, (HMENU)2, hInst, NULL);
+        SendMessageW(g_hLicenseEdit, WM_SETFONT, (WPARAM)hFont, TRUE);
+        SetFocus(g_hLicenseEdit);
         return 0;
     }
-    if (msg == WM_COMMAND) {
-        if (LOWORD(wp) == IDOK) {
+    case WM_COMMAND:
+        if (LOWORD(wp) == 1) {  // 验证按钮
             char buf[256] = {0};
-            GetWindowTextA(hEdit, buf, 256);
+            GetWindowTextA(g_hLicenseEdit, buf, 256);
             string kami = buf;
             if (!kami.empty()) {
                 if (VerifyLicense(kami)) {
-                    EndDialog(hwnd, 1);
+                    g_LicenseResult = 1;
+                    DestroyWindow(hwnd);
                 } else {
                     MessageBoxA(hwnd, "卡密验证失败，请检查卡密是否正确！", "验证失败", MB_ICONERROR);
                 }
@@ -586,14 +587,12 @@ static LRESULT CALLBACK LicenseDialogProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM
             }
             return TRUE;
         }
-        if (LOWORD(wp) == IDCANCEL) {
-            EndDialog(hwnd, 0);
+        if (LOWORD(wp) == 2) {  // 取消按钮
+            g_LicenseResult = 2;
+            DestroyWindow(hwnd);
             return TRUE;
         }
-    }
-    if (msg == WM_CLOSE) {
-        EndDialog(hwnd, 0);
-        return TRUE;
+        break;
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
@@ -612,10 +611,27 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hp, LPWSTR cl, int ns) {
     lc.lpszClassName = L"LicenseDialogClass";
     RegisterClassExW(&lc);
 
-    // ========== 卡密验证 ==========
-    // 先弹窗让用户输入卡密
-    if (!DialogBoxParamW(hInst, NULL, NULL, LicenseDialogProc, 0)) {
-        // 用户取消或验证失败，退出程序
+    // ========== 创建卡密对话框窗口 ==========
+    HWND hLicenseDlg = CreateWindowExW(
+        0, L"LicenseDialogClass", L"卡密验证",
+        WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
+        (GetSystemMetrics(SM_CXSCREEN) - 320) / 2,
+        (GetSystemMetrics(SM_CYSCREEN) - 160) / 2,
+        320, 160, NULL, NULL, hInst, NULL);
+
+    ShowWindow(hLicenseDlg, SW_SHOW);
+    UpdateWindow(hLicenseDlg);
+
+    // ========== 卡密验证消息循环 ==========
+    MSG m;
+    while (g_LicenseResult == 0 && GetMessage(&m, NULL, 0, 0)) {
+        TranslateMessage(&m);
+        DispatchMessage(&m);
+    }
+
+    // ========== 验证结果处理 ==========
+    if (g_LicenseResult != 1) {
+        // 验证失败或取消，退出程序
         return 0;
     }
 
@@ -646,10 +662,10 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hp, LPWSTR cl, int ns) {
     ShowWindow(hMain, SW_SHOW);
     UpdateWindow(hMain);
 
-    MSG m;
-    while (GetMessage(&m, NULL, 0, 0)) {
-        TranslateMessage(&m);
-        DispatchMessage(&m);
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
     }
     DeleteCriticalSection(&g_csLog);
     return 0;
