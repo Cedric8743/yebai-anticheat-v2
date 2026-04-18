@@ -340,8 +340,8 @@ static bool VerifyLicense(const string& kami) {
         "&sign=" + signMd5 + "&value=" + _Value;
     string encryptedData = RC4EncryptHex(encryptData, WY_RC4KEY);
 
-    // 发送请求 (GET方式)
-    string url = "api/?id=PyP0D00g00b&app=" + WY_APPID + "&data=" + encryptedData;
+    // 发送请求 (GET方式) - 尝试kmlogon
+    string url = "api/?id=kmlogon&app=" + WY_APPID + "&data=" + encryptedData;
     string response = httpget(WY_HOST, url);
 
     // 调试：显示服务器返回内容
