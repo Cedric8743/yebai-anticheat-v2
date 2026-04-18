@@ -219,8 +219,6 @@ static string httppost(const string& hostname, const string& url, const string& 
 
 // ====== 微验卡密验证 ======
 static bool VerifyLicense(const string& kami) {
-    cout << ">>>正在验证卡密..." << endl;
-
     string _Imei = getIMEI();
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -239,19 +237,23 @@ static bool VerifyLicense(const string& kami) {
         "&value=" + _Value;
 
     string response = httppost(WY_HOST, "api/?id=kmlogon", postData);
-    cout << "响应: " << response << endl;
+
+    // 调试：显示服务器返回内容
+    MessageBoxA(NULL, ("服务器响应:\n" + response).c_str(), "调试", MB_OK);
 
     try {
         json j = json::parse(response);
-        if (j["code"] == WY_SUCCESS_CODE) {
-            cout << "验证成功!" << endl;
+        int code = j["code"];
+        if (code == WY_SUCCESS_CODE) {
+            MessageBoxA(NULL, "卡密验证成功！", "成功", MB_ICONINFORMATION);
             return true;
         } else {
-            cout << "验证失败: " << j["msg"].get<string>() << endl;
+            string msg = j["msg"].get<string>();
+            MessageBoxA(NULL, ("验证失败: " + msg).c_str(), "验证失败", MB_ICONERROR);
             return false;
         }
-    } catch (...) {
-        cout << "解析响应失败" << endl;
+    } catch (exception& e) {
+        MessageBoxA(NULL, ("解析响应失败: " + string(e.what())).c_str(), "错误", MB_ICONERROR);
         return false;
     }
 }
