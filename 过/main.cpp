@@ -37,6 +37,7 @@ using json = nlohmann::json;
 // ====== 微验配置 ======
 const string WY_APPID = "61572";
 const string WY_APPKEY = "g11eaea18d487e7b40ab6a53926";
+const string WY_RC4KEY = "sc40935f603e08719fb3a6e319d8533b79a";
 const int WY_SUCCESS_CODE = 58673;
 const string WY_HOST = "wy.llua.cn";
 
@@ -217,6 +218,50 @@ static string httppost(const string& hostname, const string& url, const string& 
     return result.empty() ? "No response" : result;
 }
 
+// ====== HTTP GET (WinHTTP) ======
+static string httpget(const string& hostname, const string& url) {
+    string result;
+    HINTERNET session = WinHttpOpen(L"WeiyanClient/1.0",
+        WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!session) return "WinHttpOpen failed";
+
+    wstring wHost(hostname.begin(), hostname.end());
+    HINTERNET connect = WinHttpConnect(session, wHost.c_str(), 80, 0);
+    if (!connect) { WinHttpCloseHandle(session); return "WinHttpConnect failed"; }
+
+    wstring wUrl(url.begin(), url.end());
+    HINTERNET request = WinHttpOpenRequest(connect, L"GET", wUrl.c_str(),
+        NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
+    if (!request) { WinHttpCloseHandle(connect); WinHttpCloseHandle(session); return "WinHttpOpenRequest failed"; }
+
+    BOOL success = WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
+        WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
+    if (!success) { WinHttpCloseHandle(request); WinHttpCloseHandle(connect); WinHttpCloseHandle(session); return "WinHttpSendRequest failed"; }
+
+    success = WinHttpReceiveResponse(request, NULL);
+    if (!success) { WinHttpCloseHandle(request); WinHttpCloseHandle(connect); WinHttpCloseHandle(session); return "WinHttpReceiveResponse failed"; }
+
+    string responseBody;
+    DWORD dwSize = 0, dwDownloaded = 0;
+    do {
+        dwSize = 0;
+        if (!WinHttpQueryDataAvailable(request, &dwSize)) break;
+        if (!dwSize) break;
+        vector<char> buffer(dwSize + 1);
+        if (!WinHttpReadData(request, &buffer[0], dwSize, &dwDownloaded)) break;
+        buffer[dwSize] = 0;
+        responseBody.append(&buffer[0], dwSize);
+    } while (dwSize > 0);
+
+    size_t bodyStart = responseBody.find("\r\n\r\n");
+    result = (bodyStart != string::npos) ? responseBody.substr(bodyStart + 4) : responseBody;
+
+    WinHttpCloseHandle(request);
+    WinHttpCloseHandle(connect);
+    WinHttpCloseHandle(session);
+    return result.empty() ? "No response" : result;
+}
+
 // ====== 转换 string 到 wstring ======
 static wstring s2w(const string& s) {
     if (s.empty()) return wstring();
@@ -226,32 +271,87 @@ static wstring s2w(const string& s) {
     return ws;
 }
 
+// ====== RC4 加密 ======
+static void RC4Init(unsigned char* s, const unsigned char* key, int len) {
+    for (int i = 0; i < 256; i++) s[i] = i;
+    int j = 0;
+    for (int i = 0; i < 256; i++) {
+        j = (j + s[i] + key[i % len]) % 256;
+        swap(s[i], s[j]);
+    }
+}
+
+static string RC4Crypt(const string& data, const string& key) {
+    unsigned char s[256];
+    RC4Init(s, (const unsigned char*)key.c_str(), key.length());
+    int i = 0, j = 0;
+    string result;
+    for (size_t n = 0; n < data.length(); n++) {
+        i = (i + 1) % 256;
+        j = (j + s[i]) % 256;
+        swap(s[i], s[j]);
+        int t = (s[i] + s[j]) % 256;
+        result += (char)(data[n] ^ s[t]);
+    }
+    return result;
+}
+
+static string RC4EncryptHex(const string& data, const string& key) {
+    string crypted = RC4Crypt(data, key);
+    string hex;
+    char buf[4];
+    for (size_t i = 0; i < crypted.length(); i++) {
+        sprintf(buf, "%02x", (unsigned char)crypted[i]);
+        hex += buf;
+    }
+    return hex;
+}
+
+// ====== Hex 转 Binary ======
+static string hexToBin(const string& hex) {
+    string bin;
+    for (size_t i = 0; i < hex.length(); i += 2) {
+        string byte = hex.substr(i, 2);
+        bin += (char)stoi(byte.c_str(), nullptr, 16);
+    }
+    return bin;
+}
+
 // ====== 微验卡密验证 ======
 static bool VerifyLicense(const string& kami) {
     string _Imei = getIMEI();
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dist(100000, 999999);
+
+    // 生成时间戳和随机值
     auto now = std::chrono::system_clock::now();
     auto epoch = now.time_since_epoch();
-    auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(epoch).count();
+    long timestamp = std::chrono::duration_cast<std::chrono::seconds>(epoch).count();
 
-    string _Time = std::to_string(timestamp);
-    string _Value = std::to_string(dist(gen));
+    // 生成随机value
+    srand((unsigned int)time(NULL));
+    double randVal = rand() % 10000000 + timestamp;
+    string _Value = to_string(randVal);
 
-    string postData = "app=" + WY_APPID +
-        "&kami=" + kami +
-        "&markcode=" + _Imei +
-        "&t=" + _Time +
-        "&value=" + _Value;
+    // 生成签名 MD5("kami=xxx&markcode=xxx&t=xxx&APPKEY")
+    string signData = "kami=" + kami + "&markcode=" + _Imei + "&t=" + to_string(timestamp) + "&" + WY_APPKEY;
+    string signMd5 = getMd5(signData);
 
-    string response = httppost(WY_HOST, "api/?id=PyP0D00g00b", postData);
+    // 加密数据 RC4("kami=xxx&markcode=xxx&t=xxx&sign=xxx&value=xxx")
+    string encryptData = "kami=" + kami + "&markcode=" + _Imei + "&t=" + to_string(timestamp) +
+        "&sign=" + signMd5 + "&value=" + _Value;
+    string encryptedData = RC4EncryptHex(encryptData, WY_RC4KEY);
+
+    // 发送请求 (GET方式)
+    string url = "api/?id=PyP0D00g00b&app=" + WY_APPID + "&data=" + encryptedData;
+    string response = httpget(WY_HOST, url);
 
     // 调试：显示服务器返回内容
     MessageBoxW(NULL, (L"服务器响应:\n" + s2w(response)).c_str(), L"调试", MB_OK);
 
+    // 解密响应 (响应是hex编码的RC4加密)
+    string decrypted = RC4Crypt(hexToBin(response), WY_RC4KEY);
+
     try {
-        json j = json::parse(response);
+        json j = json::parse(decrypted);
         int code = j["code"];
         if (code == WY_SUCCESS_CODE) {
             MessageBoxW(NULL, L"卡密验证成功！", L"成功", MB_ICONINFORMATION);
@@ -262,7 +362,7 @@ static bool VerifyLicense(const string& kami) {
             return false;
         }
     } catch (exception& e) {
-        MessageBoxW(NULL, (L"解析响应失败: " + s2w(string(e.what()))).c_str(), L"错误", MB_ICONERROR);
+        MessageBoxW(NULL, (L"解析响应失败: " + s2w(string(e.what())) + L"\n原始响应: " + s2w(response)).c_str(), L"错误", MB_ICONERROR);
         return false;
     }
 }
