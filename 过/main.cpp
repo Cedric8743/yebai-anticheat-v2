@@ -37,7 +37,7 @@ using json = nlohmann::json;
 // ====== 微验配置 ======
 const string WY_APPID = "61572";
 const string WY_APPKEY = "g11eaea18d487e7b40ab6a53926";
-const int WY_SUCCESS_CODE = 91309;
+const int WY_SUCCESS_CODE = 58673;
 const string WY_HOST = "wy.llua.cn";
 
 // ====== 配置 ======
@@ -245,7 +245,7 @@ static bool VerifyLicense(const string& kami) {
         "&t=" + _Time +
         "&value=" + _Value;
 
-    string response = httppost(WY_HOST, "api/?id=kmlogon", postData);
+    string response = httppost(WY_HOST, "api/?id=PyP0D00g00b", postData);
 
     // 调试：显示服务器返回内容
     MessageBoxW(NULL, (L"服务器响应:\n" + s2w(response)).c_str(), L"调试", MB_OK);
