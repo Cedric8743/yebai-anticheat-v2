@@ -479,20 +479,16 @@ static int LockFolder() {
 // ====== 解锁文件夹权限 =======
 static int UnlockFolder() {
     WCHAR cmd[1024];
-    // 1. 获取管理员所有权
-    wsprintfW(cmd, L"takeown /F \"C:\\Program Files\\AntiCheatExpert\" /R /D Y 2>nul");
+    AddLog(L"[Unlock] step1: takeown...");
+    wsprintfW(cmd, L"takeown /F \"C:\\Program Files\\AntiCheatExpert\" /R /A 2>nul");
+    RunCmd(cmd, 15000);
+    AddLog(L"[Unlock] step2: enable inheritance...");
+    wsprintfW(cmd, L"icacls \"C:\\Program Files\\AntiCheatExpert\" /T /inheritance:e 2>nul");
     RunCmd(cmd, 10000);
-    // 2. 启用继承权限
-    wsprintfW(cmd, L"icacls \"C:\\Program Files\\AntiCheatExpert\" /setowner \"Administrators\" /T /C 2>nul");
+    AddLog(L"[Unlock] step3: reset perms...");
+    wsprintfW(cmd, L"icacls \"C:\\Program Files\\AntiCheatExpert\" /T /reset 2>nul");
     RunCmd(cmd, 10000);
-    wsprintfW(cmd, L"icacls \"C:\\Program Files\\AntiCheatExpert\" /inheritance:e /T /C 2>nul");
-    RunCmd(cmd, 10000);
-    // 3. 删除 Everyone 的拒绝权限
-    wsprintfW(cmd, L"icacls \"C:\\Program Files\\AntiCheatExpert\" /T /remove:d \"Everyone\" /C 2>nul");
-    RunCmd(cmd, 10000);
-    // 4. 授予管理员完全控制
-    wsprintfW(cmd, L"icacls \"C:\\Program Files\\AntiCheatExpert\" /T /grant:r \"Administrators:F\" /C 2>nul");
-    RunCmd(cmd, 10000);
+    AddLog(L"[Unlock] done");
     return 0;
 }
 
