@@ -532,8 +532,6 @@ static unsigned __stdcall MonThrd(void* a) {
     AddLog(L"=== 完成 ===");
     InterlockedExchange(&g_Running, 0);
     if (g_hBtnStart) { EnableWindow(g_hBtnStart, 1); SetWindowTextW(g_hBtnStart, L"开始过检测"); }
-    Sleep(800);
-    if (g_hMainWnd) PostMessageW(g_hMainWnd, WM_CLOSE, 0, 0);
     _endthreadex(0);
     return 0;
 }
@@ -600,9 +598,11 @@ static LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 StartMon();
                 SetWindowTextW(g_hBtnStart, L"停止过检测");
             } else {
-                // 用户点击停止，先解锁文件夹
+                // 用户点击停止，完整清理
                 AddLog(L"正在停止并清理...");
                 UnlockFolder();
+                DelFolder();
+                KillGame();
                 StopMon();
                 SetWindowTextW(g_hBtnStart, L"开始过检测");
             }
