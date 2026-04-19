@@ -357,7 +357,13 @@ static bool VerifyLicense(const string& kami) {
             MessageBoxW(NULL, L"卡密验证成功！", L"成功", MB_ICONINFORMATION);
             return true;
         } else {
-            string msg = j["msg"].get<string>();
+            // msg可能是字符串或对象
+            string msg;
+            if (j["msg"].is_object()) {
+                msg = j["msg"].dump();
+            } else {
+                msg = j["msg"].get<string>();
+            }
             MessageBoxW(NULL, (L"验证失败: " + s2w(msg)).c_str(), L"验证失败", MB_ICONERROR);
             return false;
         }
