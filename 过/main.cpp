@@ -489,49 +489,45 @@ static int UnlockFolder() {
 // ====== 监控线程 ======
 static unsigned __stdcall MonThrd(void* a) {
     (void)a;
-    AddLog(L"【1/4】正在清理残留...");
-    DelFolder();
-    AddLog(L"【1/4】清理完成");
-    AddLog(L"【2/4】等待游戏启动...");
+    AddLog(L"【1/4】等待游戏启动...");
 
     DWORD st = GetTickCount();
     while (g_Running) {
-        if (IsRunning(GAME_PROC)) { AddLog(L"【2/4】检测到游戏进程!"); break; }
+        if (IsRunning(GAME_PROC)) { AddLog(L"【1/4】检测到游戏进程!"); break; }
         if (GetTickCount() - st > 600000) {
-            AddLog(L"【2/4】等待超时");
+            AddLog(L"【1/4】等待超时");
             InterlockedExchange(&g_Running, 0);
             if (g_hBtnStart) { EnableWindow(g_hBtnStart, 1); SetWindowTextW(g_hBtnStart, L"开始过检测"); }
             _endthreadex(0); return 0;
         }
         Sleep(500);
     }
-    if (!g_Running) { AddLog(L"【2/4】用户取消"); _endthreadex(0); return 0; }
+    if (!g_Running) { AddLog(L"【1/4】用户取消"); _endthreadex(0); return 0; }
 
-    AddLog(L"【3/4】过检测执行中...");
+    AddLog(L"【2/4】过检测执行中...");
     Sleep(5000);
 
     LockFolder();
-    AddLog(L"【3/4】过检测执行成功!");
+    AddLog(L"【2/4】过检测执行成功!");
 
-    AddLog(L"【4/4】监控中...");
+    AddLog(L"【3/4】监控中...");
     while (g_Running) {
         if (!IsRunning(GAME_PROC)) {
             Sleep(1500);
             if (!IsRunning(GAME_PROC)) {
-                AddLog(L"【4/4】游戏已退出!");
+                AddLog(L"【3/4】游戏已退出!");
                 break;
             }
-            AddLog(L"【4/4】游戏恢复，继续监控...");
+            AddLog(L"【3/4】游戏恢复，继续监控...");
         }
         Sleep(1000);
     }
 
-    if (g_Running) {
-        AddLog(L"正在清理...");
-        UnlockFolder();
-        DelFolder();
-        KillGame();
-    }
+    // 用户停止或游戏退出，清理并解锁
+    AddLog(L"正在清理...");
+    UnlockFolder();
+    DelFolder();
+    KillGame();
 
     AddLog(L"=== 完成 ===");
     InterlockedExchange(&g_Running, 0);
@@ -599,19 +595,26 @@ static LRESULT CALLBACK MainProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     if (msg == WM_COMMAND) {
-        if (LOWORD(wp) == 20) {
+        if (LOWORD(wp) == 20) {  // 开始/停止过检测
             if (!g_Running) {
                 StartMon();
                 SetWindowTextW(g_hBtnStart, L"停止过检测");
             } else {
+                // 用户点击停止，先解锁文件夹
+                AddLog(L"正在停止并清理...");
+                UnlockFolder();
                 StopMon();
                 SetWindowTextW(g_hBtnStart, L"开始过检测");
-                CloseHandle((HANDLE)_beginthreadex(NULL, 0, CleanupThrd, NULL, 0, NULL));
             }
         }
-        if (LOWORD(wp) == 21) {
-            StopMon();
-            CloseHandle((HANDLE)_beginthreadex(NULL, 0, CleanupThrd, NULL, 0, NULL));
+        if (LOWORD(wp) == 21) {  // 退出程序
+            AddLog(L"正在清理...");
+            UnlockFolder();
+            DelFolder();
+            KillGame();
+            if (g_Running) StopMon();
+            Sleep(200);
+            DestroyWindow(hwnd);
         }
     }
     if (msg == WM_CLOSE) {
