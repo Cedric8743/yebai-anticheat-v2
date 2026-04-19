@@ -479,8 +479,13 @@ static int LockFolder() {
 // ====== 解锁文件夹权限 =======
 static int UnlockFolder() {
     WCHAR cmd[1024];
+    // 1. 先获取管理员所有权
     wsprintfW(cmd, L"takeown /F \"C:\\Program Files\\AntiCheatExpert\" /R /D Y 2>nul");
     RunCmd(cmd, 10000);
+    // 2. 删除 Everyone 的拒绝权限
+    wsprintfW(cmd, L"icacls \"C:\\Program Files\\AntiCheatExpert\" /T /remove:d \"Everyone\" /C 2>nul");
+    RunCmd(cmd, 10000);
+    // 3. 重置所有权限为继承
     wsprintfW(cmd, L"icacls \"C:\\Program Files\\AntiCheatExpert\" /T /reset /C 2>nul");
     RunCmd(cmd, 10000);
     return 0;
