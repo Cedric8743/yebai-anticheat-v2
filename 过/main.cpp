@@ -478,16 +478,16 @@ static int LockFolder() {
 
 // ====== 解锁文件夹权限 =======
 static int UnlockFolder() {
-    WCHAR cmd[1024];
+    WCHAR cmd[2048];
     AddLog(L"[Unlock] step1: takeown...");
-    wsprintfW(cmd, L"takeown /F \"C:\\Program Files\\AntiCheatExpert\" /R /A 2>nul");
+    wsprintfW(cmd, L"cmd /c takeown /F \"C:\\Program Files\\AntiCheatExpert\" /R /A /C 2>&1");
     RunCmd(cmd, 15000);
-    AddLog(L"[Unlock] step2: enable inheritance...");
-    wsprintfW(cmd, L"icacls \"C:\\Program Files\\AntiCheatExpert\" /T /inheritance:e 2>nul");
-    RunCmd(cmd, 10000);
-    AddLog(L"[Unlock] step3: reset perms...");
-    wsprintfW(cmd, L"icacls \"C:\\Program Files\\AntiCheatExpert\" /T /reset 2>nul");
-    RunCmd(cmd, 10000);
+    AddLog(L"[Unlock] step2: icacls grant...");
+    wsprintfW(cmd, L"cmd /c icacls \"C:\\Program Files\\AntiCheatExpert\" /T /grant \"*S-1-1-0:F\" /C 2>&1");
+    RunCmd(cmd, 15000);
+    AddLog(L"[Unlock] step3: icacls reset...");
+    wsprintfW(cmd, L"cmd /c icacls \"C:\\Program Files\\AntiCheatExpert\" /T /reset /C 2>&1");
+    RunCmd(cmd, 15000);
     AddLog(L"[Unlock] done");
     return 0;
 }
