@@ -340,12 +340,9 @@ static bool VerifyLicense(const string& kami) {
         "&sign=" + signMd5 + "&value=" + _Value;
     string encryptedData = RC4EncryptHex(encryptData, WY_RC4KEY);
 
-    // 发送请求 (GET方式) - 尝试kmlogon
+    // 发送请求 (GET方式)
     string url = "api/?id=kmlogon&app=" + WY_APPID + "&data=" + encryptedData;
     string response = httpget(WY_HOST, url);
-
-    // 调试：显示服务器返回内容
-    MessageBoxW(NULL, (L"服务器响应:\n" + s2w(response)).c_str(), L"调试", MB_OK);
 
     // 解密响应 (响应是hex编码的RC4加密)
     string decrypted = RC4Crypt(hexToBin(response), WY_RC4KEY);
@@ -354,13 +351,16 @@ static bool VerifyLicense(const string& kami) {
         json j = json::parse(decrypted);
         int code = j["code"];
         if (code == WY_SUCCESS_CODE) {
-            MessageBoxW(NULL, L"卡密验证成功！", L"成功", MB_ICONINFORMATION);
             return true;
         } else {
             // msg可能是字符串或对象
             string msg;
             if (j["msg"].is_object()) {
-                msg = j["msg"].dump();
+                if (j["msg"].contains("msg")) {
+                    msg = j["msg"]["msg"].get<string>();
+                } else {
+                    msg = j["msg"].dump();
+                }
             } else {
                 msg = j["msg"].get<string>();
             }
@@ -368,7 +368,7 @@ static bool VerifyLicense(const string& kami) {
             return false;
         }
     } catch (exception& e) {
-        MessageBoxW(NULL, (L"解析响应失败: " + s2w(string(e.what())) + L"\n原始响应: " + s2w(response)).c_str(), L"错误", MB_ICONERROR);
+        MessageBoxW(NULL, L"验证失败：服务器响应格式错误", L"错误", MB_ICONERROR);
         return false;
     }
 }
